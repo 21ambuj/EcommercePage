@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stellar Threads - Animated E-Commerce</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+
+        .product-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            transform-style: preserve-3d;
+        }
+
+        .cart-icon .cart-count {
+            transition: transform 0.3s ease, background-color 0.3s ease;
+        }
+        
+        .cart-icon.shake .cart-count {
+            animation: shake 0.5s;
+        }
+
+        .add-to-cart-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+
+        .flying-product {
+            position: fixed;
+            z-index: 1000;
+            border-radius: 0.5rem;
+            transition: all 0.7s cubic-bezier(0.55, 0, 1, 0.45);
+        }
+
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+        }
+        
+        .modal-content {
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        .filter-btn.active {
+            background-color: #1a202c;
+            color: white;
+        }
+
+    </style>
+    
+</head>
+<body class="bg-gray-100">
+
+    <!-- Header -->
+    <header class="bg-white shadow-md sticky top-0 z-40">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-20">
+                <div class="flex items-center">
+                     <i class="ri-shopping-bag-3-fill text-3xl text-gray-800 mr-2"></i>
+                    <h1 class="text-2xl font-bold text-gray-800">Stellar Threads</h1>
+                </div>
+                <div class="cart-icon relative">
+                    <i class="ri-shopping-cart-2-line text-3xl text-gray-600"></i>
+                    <span class="cart-count absolute -top-2 -right-3 bg-red-500 text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center">0</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <!-- Filters and Search -->
+        <div class="mb-10">
+            <div class="flex flex-wrap items-center justify-between gap-6 mb-6">
+                <div class="relative w-full md:w-1/3">
+                    <input type="text" id="search-bar" placeholder="Search for products..." class="w-full pl-10 pr-4 py-3 rounded-full border-2 border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-transparent transition">
+                    <i class="ri-search-line absolute top-1/2 left-4 -translate-y-1/2 text-gray-400"></i>
+                </div>
+                <div class="flex flex-wrap gap-2" id="category-filters">
+                    <button class="filter-btn active text-sm font-medium px-4 py-2 rounded-full border-2 border-gray-300 transition" data-category="all">All</button>
+                    <!-- Dynamic categories will be inserted here -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Product Grid -->
+        <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+            <!-- Product cards will be inserted here -->
+        </div>
+
+        <div id="loader" class="text-center py-20">
+            <i class="ri-loader-4-line animate-spin text-5xl text-gray-800"></i>
+        </div>
+    </main>
+
+    <!-- Product Modal -->
+    <div id="product-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden opacity-0">
+        <div class="modal-content bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-full overflow-y-auto transform scale-95 opacity-0">
+            <!-- Modal content will be inserted here -->
+        </div>
+    </div>
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const productGrid = document.getElementById('product-grid');
+            const categoryFilters = document.getElementById('category-filters');
+            const searchBar = document.getElementById('search-bar');
+            const cartIcon = document.querySelector('.cart-icon');
+            const cartCount = document.querySelector('.cart-count');
+            const loader = document.getElementById('loader');
+            const modal = document.getElementById('product-modal');
+            const modalContent = modal.querySelector('.modal-content');
+
+            let allProducts = [];
+            let categories = new Set();
+            let currentCartCount = 0;
+
+            // Fetch products from FakeStoreAPI
+            fetch('https://fakestoreapi.com/products')
+                .then(res => res.json())
+                .then(products => {
+                    allProducts = products;
+                    allProducts.forEach(product => categories.add(product.category));
+                    renderCategories();
+                    renderProducts(allProducts);
+                    loader.style.display = 'none';
+                })
+                .catch(error => {
+                    console.error("Failed to fetch products:", error);
+                    loader.innerHTML = `<p class="text-red-500">Failed to load products. Please try again later.</p>`;
+                });
+
+            function renderCategories() {
+                categories.forEach(category => {
+                    const button = document.createElement('button');
+                    button.className = 'filter-btn text-sm font-medium px-4 py-2 rounded-full border-2 border-gray-300 transition';
+                    button.textContent = category.charAt(0).toUpperCase() + category.slice(1);
+                    button.dataset.category = category;
+                    categoryFilters.appendChild(button);
+                });
+            }
+
+            function renderProducts(products) {
+                productGrid.innerHTML = '';
+                products.forEach(product => {
+                    const card = document.createElement('div');
+                    card.className = 'product-card bg-white rounded-xl shadow-lg overflow-hidden flex flex-col cursor-pointer';
+                    card.dataset.productId = product.id;
+
+                    card.innerHTML = `
+                        <div class="h-64 w-full overflow-hidden p-4">
+                            <img src="${product.image}" alt="${product.title}" class="product-image h-full w-full object-contain">
+                        </div>
+                        <div class="p-5 flex flex-col flex-grow">
+                            <h3 class="text-lg font-semibold text-gray-800 truncate">${product.title}</h3>
+                            <p class="text-sm text-gray-500 capitalize mb-3">${product.category}</p>
+                            <div class="flex items-center mb-4">
+                                <div class="flex text-yellow-400">
+                                    ${getStarRating(product.rating.rate)}
+                                </div>
+                                <span class="text-xs text-gray-500 ml-2">(${product.rating.count} reviews)</span>
+                            </div>
+                            <div class="mt-auto flex items-center justify-between">
+                                <p class="text-2xl font-bold text-gray-900">$${product.price.toFixed(2)}</p>
+                                <button class="add-to-cart-btn bg-gray-800 text-white rounded-full h-12 w-12 flex items-center justify-center transition shadow-md">
+                                    <i class="ri-shopping-cart-2-line"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    productGrid.appendChild(card);
+                });
+
+                // GSAP Animations for cards
+                gsap.from(".product-card", {
+                    duration: 0.8,
+                    opacity: 0,
+                    y: 50,
+                    stagger: 0.1,
+                    ease: "power3.out"
+                });
+
+                addCardEventListeners();
+            }
+
+            function getStarRating(rate) {
+                let stars = '';
+                const fullStars = Math.floor(rate);
+                const halfStar = rate % 1 >= 0.5;
+                for (let i = 0; i < fullStars; i++) {
+                    stars += '<i class="ri-star-fill"></i>';
+                }
+                if (halfStar) {
+                    stars += '<i class="ri-star-half-fill"></i>';
+                }
+                for (let i = 0; i < 5 - fullStars - (halfStar ? 1 : 0); i++) {
+                    stars += '<i class="ri-star-line"></i>';
+                }
+                return stars;
+            }
+
+            function addCardEventListeners() {
+                document.querySelectorAll('.product-card').forEach(card => {
+                    const imageContainer = card.querySelector('.product-image');
+
+                    card.addEventListener('mousemove', e => {
+                        const {
+                            left,
+                            top,
+                            width,
+                            height
+                        } = card.getBoundingClientRect();
+                        const x = (e.clientX - left - width / 2) / 15;
+                        const y = (e.clientY - top - height / 2) / 15 * -1;
+                        gsap.to(card, {
+                            rotationY: x,
+                            rotationX: y,
+                            transformPerspective: 1000,
+                            ease: "power1.out"
+                        });
+                    });
+
+                    card.addEventListener('mouseleave', () => {
+                        gsap.to(card, {
+                            rotationY: 0,
+                            rotationX: 0,
+                            ease: "power1.out"
+                        });
+                    });
+
+                    card.addEventListener('click', (e) => {
+                        if (!e.target.closest('.add-to-cart-btn')) {
+                            const productId = card.dataset.productId;
+                            openModal(productId);
+                        }
+                    });
+
+                    card.querySelector('.add-to-cart-btn').addEventListener('click', e => {
+                        e.stopPropagation();
+                        addToCartAnimation(card);
+                    });
+                });
+            }
+            
+            function addToCartAnimation(card) {
+                // Fly to cart animation
+                const productImage = card.querySelector('.product-image');
+                const flyingImage = productImage.cloneNode();
+                const startRect = productImage.getBoundingClientRect();
+                const endRect = cartIcon.getBoundingClientRect();
+
+                flyingImage.classList.add('flying-product');
+                document.body.appendChild(flyingImage);
+
+                gsap.set(flyingImage, {
+                    top: startRect.top,
+                    left: startRect.left,
+                    width: startRect.width,
+                    height: startRect.height,
+                });
+
+                gsap.to(flyingImage, {
+                    duration: 0.7,
+                    top: endRect.top + endRect.height / 2,
+                    left: endRect.left + endRect.width / 2,
+                    width: 20,
+                    height: 20,
+                    opacity: 0.5,
+                    ease: "power1.inOut",
+                    onComplete: () => {
+                        document.body.removeChild(flyingImage);
+                        currentCartCount++;
+                        cartCount.textContent = currentCartCount;
+                        cartIcon.classList.add('shake');
+                        gsap.fromTo(cartCount, {scale: 1.5}, {scale: 1, duration: 0.3});
+                        setTimeout(() => cartIcon.classList.remove('shake'), 500);
+                    }
+                });
+            }
+
+            // Filtering logic
+            categoryFilters.addEventListener('click', e => {
+                if (e.target.tagName === 'BUTTON') {
+                    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+                    
+                    const category = e.target.dataset.category;
+                    const searchTerm = searchBar.value.toLowerCase();
+                    filterAndRender(category, searchTerm);
+                }
+            });
+
+            // Search logic
+            searchBar.addEventListener('input', () => {
+                const activeCategory = document.querySelector('.filter-btn.active').dataset.category;
+                const searchTerm = searchBar.value.toLowerCase();
+                filterAndRender(activeCategory, searchTerm);
+            });
+
+            function filterAndRender(category, searchTerm) {
+                let filteredProducts = allProducts;
+
+                if (category !== 'all') {
+                    filteredProducts = filteredProducts.filter(p => p.category === category);
+                }
+
+                if (searchTerm) {
+                    filteredProducts = filteredProducts.filter(p => p.title.toLowerCase().includes(searchTerm) || p.description.toLowerCase().includes(searchTerm));
+                }
+                
+                // Animate out old cards
+                 gsap.to(".product-card", {
+                    duration: 0.5,
+                    opacity: 0,
+                    y: -50,
+                    stagger: 0.05,
+                    ease: "power3.in",
+                    onComplete: () => {
+                       renderProducts(filteredProducts);
+                    }
+                });
+            }
+            
+            // Modal logic
+            function openModal(productId) {
+                const product = allProducts.find(p => p.id == productId);
+                if (!product) return;
+
+                modalContent.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 p-8">
+                        <div class="flex items-center justify-center bg-gray-100 rounded-lg p-4">
+                            <img src="${product.image}" alt="${product.title}" class="max-h-96 object-contain">
+                        </div>
+                        <div>
+                            <button class="close-modal absolute top-4 right-4 text-gray-500 hover:text-gray-800 transition">
+                                <i class="ri-close-line text-2xl"></i>
+                            </button>
+                            <h2 class="text-3xl font-bold text-gray-900 mb-2">${product.title}</h2>
+                            <p class="text-gray-500 capitalize mb-4">${product.category}</p>
+                            <div class="flex items-center mb-4">
+                                <div class="flex text-yellow-400">
+                                    ${getStarRating(product.rating.rate)}
+                                </div>
+                                <span class="text-sm text-gray-500 ml-2">(${product.rating.count} reviews)</span>
+                            </div>
+                            <p class="text-gray-600 mb-6">${product.description}</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-4xl font-bold text-gray-900">$${product.price.toFixed(2)}</span>
+                                <button class="add-to-cart-modal bg-gray-800 text-white font-bold py-3 px-6 rounded-full transition hover:bg-gray-700 shadow-lg flex items-center gap-2">
+                                    <i class="ri-shopping-cart-2-line"></i> Add to Cart
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                modal.classList.remove('hidden');
+                gsap.to(modal, { opacity: 1, duration: 0.3 });
+                gsap.to(modalContent, { opacity: 1, scale: 1, duration: 0.3, delay: 0.1 });
+
+                modal.querySelector('.close-modal').addEventListener('click', closeModal);
+                modal.querySelector('.add-to-cart-modal').addEventListener('click', () => {
+                    const card = document.querySelector(`.product-card[data-product-id="${productId}"]`);
+                    if(card) addToCartAnimation(card);
+                    closeModal();
+                });
+            }
+
+            function closeModal() {
+                gsap.to(modalContent, { opacity: 0, scale: 0.95, duration: 0.3 });
+                gsap.to(modal, { opacity: 0, duration: 0.3, delay: 0.1, onComplete: () => modal.classList.add('hidden') });
+            }
+
+            modal.addEventListener('click', (e) => {
+                if(e.target === modal) {
+                    closeModal();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
